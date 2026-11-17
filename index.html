@@ -1,0 +1,469 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>LQ Audio Mixer</title>
+<link rel="icon" type="image/png" href="lq-audio-mixer-icon.png">
+<link rel="apple-touch-icon" sizes="180x180" href="lq-audio-mixer-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="LQ Audio Mixer">
+<meta name="theme-color" content="#4f46e5">
+<style>
+  :root{
+    --bg:#f4f5fb; --card:#fff; --text:#1c1d2b; --muted:#6b6e86; --line:#e2e4f0;
+    --accent:#4f46e5; --accent-text:#fff; --soft:#eceafd; --danger:#d93a3a; --ok:#1a8a4a;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#12131c; --card:#1c1e2c; --text:#eceefa; --muted:#9a9db8; --line:#2c2f44;
+      --accent:#7c75ff; --accent-text:#0f1020; --soft:#26284a; --danger:#ff6b6b; --ok:#4ed18a; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font:16px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    padding:env(safe-area-inset-top) 0 calc(env(safe-area-inset-bottom) + 24px)}
+  main{max-width:560px;margin:0 auto;padding:16px}
+  h1{font-size:26px;margin:8px 0 2px}
+  .sub{color:var(--muted);margin:0 0 16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:14px}
+  .card h2{font-size:17px;margin:0 0 12px;display:flex;gap:8px;align-items:center}
+  .num{background:var(--accent);color:var(--accent-text);width:24px;height:24px;border-radius:50%;
+    display:inline-flex;align-items:center;justify-content:center;font-size:13px;font-weight:700}
+  label{display:block;font-size:14px;color:var(--muted);margin:12px 0 4px}
+  .row{display:flex;gap:10px;align-items:center}
+  .row > *{flex:1}
+  .val{flex:0 0 52px;text-align:right;font-variant-numeric:tabular-nums;color:var(--muted);font-size:14px}
+  input[type=range]{width:100%;accent-color:var(--accent)}
+  input[type=number],input[type=file],select,textarea{width:100%;font:inherit;color:var(--text);background:var(--bg);
+    border:1px solid var(--line);border-radius:10px;padding:10px}
+  textarea{min-height:110px;resize:vertical}
+  button{font:inherit;font-weight:600;border:0;border-radius:12px;padding:12px 16px;cursor:pointer;
+    background:var(--soft);color:var(--accent)}
+  button.primary{background:var(--accent);color:var(--accent-text)}
+  button.rec{background:var(--danger);color:#fff}
+  button:disabled{opacity:.45;cursor:default}
+  .tabs{display:flex;gap:6px;margin-bottom:6px}
+  .tabs button{flex:1;padding:10px 6px;font-size:15px}
+  .tabs button.on{background:var(--accent);color:var(--accent-text)}
+  .panel{display:none}.panel.on{display:block}
+  .info{font-size:14px;color:var(--muted);margin:8px 0 0}
+  .note{font-size:13px;color:var(--muted);background:var(--bg);border-radius:10px;padding:10px;margin-top:10px}
+  .check{display:flex;gap:10px;align-items:center;font-size:15px;color:var(--text);margin:12px 0 0}
+  .check input{width:20px;height:20px;accent-color:var(--accent)}
+  audio{width:100%;margin-top:10px}
+  #status{min-height:22px;font-size:14px;margin:10px 0 0;color:var(--muted)}
+  #status.err{color:var(--danger)} #status.ok{color:var(--ok)}
+  .bar{height:6px;background:var(--line);border-radius:3px;overflow:hidden;margin-top:10px;display:none}
+  .bar i{display:block;height:100%;width:0;background:var(--accent);transition:width .2s}
+  #result{display:none;margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
+  .btns{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap}
+  .btns > *{flex:1;text-align:center;text-decoration:none;min-width:120px}
+  a.btn{display:block;border-radius:12px;padding:12px 16px;font-weight:600;background:var(--accent);color:var(--accent-text)}
+</style>
+</head>
+<body>
+<main>
+  <h1>LQ Audio Mixer</h1>
+  <p class="sub">Put your voice, or a voice made from your text, over background music.</p>
+
+  <!-- 1. MUSIC -->
+  <section class="card">
+    <h2><span class="num">1</span> Background music</h2>
+    <input type="file" id="musicFile" accept="audio/*,.mp3,.m4a,.wav,.ogg,.aac">
+    <div class="info" id="musicInfo">No music chosen yet.</div>
+    <label>Music volume <span class="val" id="musicVolV" style="float:right">40%</span></label>
+    <input type="range" id="musicVol" min="0" max="100" value="40">
+    <div class="row">
+      <div><label>Fade in (sec)</label><input type="number" id="fadeIn" min="0" step="0.5" value="0"></div>
+      <div><label>Fade out (sec)</label><input type="number" id="fadeOut" min="0" step="0.5" value="2"></div>
+    </div>
+  </section>
+
+  <!-- 2. VOICE -->
+  <section class="card">
+    <h2><span class="num">2</span> Voice</h2>
+    <div class="tabs">
+      <button data-mode="record" class="on">Record</button>
+      <button data-mode="upload">Upload</button>
+      <button data-mode="text">Type text</button>
+    </div>
+
+    <div class="panel on" id="p-record">
+      <button class="rec" id="recBtn" style="width:100%">● Start recording</button>
+      <label class="check"><input type="checkbox" id="withMusic"> Play the music while I record (use headphones)</label>
+      <div class="info" id="recInfo">Tip: with the music playing, start speaking when you want your voice to come in.</div>
+      <audio id="recPlayback" controls style="display:none"></audio>
+    </div>
+
+    <div class="panel" id="p-upload">
+      <input type="file" id="voiceFile" accept="audio/*,.mp3,.m4a,.wav,.ogg,.aac">
+      <div class="info" id="voiceInfo">Choose a voice recording from your device.</div>
+    </div>
+
+    <div class="panel" id="p-text">
+      <textarea id="ttsText" placeholder="Type or paste what the voice should say…"></textarea>
+      <label>Voice</label>
+      <select id="ttsVoice"></select>
+      <label>Speed <span class="val" id="ttsRateV" style="float:right">1.0×</span></label>
+      <input type="range" id="ttsRate" min="0.6" max="1.4" step="0.05" value="1">
+      <div class="note">Text voices come from your device and can be played with the music here, but browsers can't save them into a file. To save a mix, use Record or Upload.</div>
+    </div>
+
+    <label>Voice volume <span class="val" id="voiceVolV" style="float:right">100%</span></label>
+    <input type="range" id="voiceVol" min="0" max="150" value="100">
+    <label>Voice starts at (seconds into the music)</label>
+    <input type="number" id="voiceStart" min="0" step="0.5" value="0">
+    <label class="check"><input type="checkbox" id="duck" checked> Lower the music while the voice speaks</label>
+    <label>Music level while voice speaks <span class="val" id="duckLevelV" style="float:right">30%</span></label>
+    <input type="range" id="duckLevel" min="0" max="100" value="30">
+  </section>
+
+  <!-- 3. PREVIEW + SAVE -->
+  <section class="card">
+    <h2><span class="num">3</span> Listen and save</h2>
+    <div class="btns" style="margin-top:0">
+      <button class="primary" id="playBtn">▶ Preview mix</button>
+    </div>
+    <div class="info" id="clock"></div>
+    <label>Save as</label>
+    <select id="fmt">
+      <option value="mp3">MP3 (smaller)</option>
+      <option value="wav">WAV (best quality)</option>
+    </select>
+    <div class="btns"><button class="primary" id="exportBtn">Create mixed file</button></div>
+    <div class="bar" id="bar"><i id="barI"></i></div>
+    <div id="status"></div>
+    <div id="result">
+      <audio id="outAudio" controls></audio>
+      <div class="btns">
+        <a class="btn" id="dl" download>Download</a>
+        <button id="shareBtn" style="display:none">Share</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const AC = window.AudioContext || window.webkitAudioContext;
+const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+
+let music = null, musicFile = null, musicUrl = null;
+let voice = null;            // decoded buffer from Record or Upload
+let mode = 'record';
+let live = null;             // active preview
+let outUrl = null, outFile = null;
+
+/* ---------- helpers ---------- */
+const num = el => Math.max(0, parseFloat($(el).value) || 0);
+const fmtT = s => { s = Math.max(0, Math.round(s)); return Math.floor(s/60) + ':' + String(s%60).padStart(2,'0'); };
+function setStatus(msg, cls){ const s = $('status'); s.textContent = msg || ''; s.className = cls || ''; }
+function bindSlider(id, vid, fmt){ const f = () => $(vid).textContent = fmt($(id).value); $(id).addEventListener('input', f); f(); }
+bindSlider('musicVol','musicVolV', v => v + '%');
+bindSlider('voiceVol','voiceVolV', v => v + '%');
+bindSlider('duckLevel','duckLevelV', v => v + '%');
+bindSlider('ttsRate','ttsRateV', v => parseFloat(v).toFixed(2).replace(/0$/,'') + '×');
+
+function decode(arrayBuffer){
+  const off = new OAC(2, 1, 44100);
+  return new Promise((res, rej) => {
+    const p = off.decodeAudioData(arrayBuffer, res, rej);
+    if (p && p.catch) p.catch(rej);
+  });
+}
+
+/* ---------- music ---------- */
+$('musicFile').addEventListener('change', async e => {
+  const f = e.target.files[0]; if (!f) return;
+  setStatus('Reading music…');
+  try {
+    music = await decode(await f.arrayBuffer());
+    musicFile = f;
+    if (musicUrl) URL.revokeObjectURL(musicUrl);
+    musicUrl = URL.createObjectURL(f);
+    $('musicInfo').textContent = f.name + ' · ' + fmtT(music.duration);
+    setStatus('');
+  } catch (err) {
+    music = null; musicFile = null;
+    $('musicInfo').textContent = 'No music chosen yet.';
+    setStatus("Couldn't read that music file. Try an MP3, M4A or WAV.", 'err');
+  }
+});
+
+/* ---------- voice tabs ---------- */
+document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => {
+  if (live) stopLive();
+  mode = b.dataset.mode;
+  document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
+  document.querySelectorAll('.panel').forEach(p => p.classList.toggle('on', p.id === 'p-' + mode));
+  setStatus('');
+}));
+
+/* ---------- upload voice ---------- */
+$('voiceFile').addEventListener('change', async e => {
+  const f = e.target.files[0]; if (!f) return;
+  $('voiceInfo').textContent = 'Reading…';
+  try {
+    voice = await decode(await f.arrayBuffer());
+    $('voiceInfo').textContent = f.name + ' · ' + fmtT(voice.duration);
+  } catch (err) {
+    voice = null;
+    $('voiceInfo').textContent = 'Choose a voice recording from your device.';
+    setStatus("Couldn't read that voice file.", 'err');
+  }
+});
+
+/* ---------- record voice ---------- */
+let mediaRec = null, recChunks = [], recStream = null, recMusicEl = null, recTimer = null, recT0 = 0;
+$('recBtn').addEventListener('click', async () => {
+  if (mediaRec && mediaRec.state === 'recording') { mediaRec.stop(); return; }
+  if (live) stopLive();
+  if (!navigator.mediaDevices || !window.MediaRecorder) {
+    setStatus("This browser can't record. Try Safari or Chrome, or use Upload.", 'err'); return;
+  }
+  const useMusic = $('withMusic').checked;
+  if (useMusic && !musicFile) { setStatus('Choose the background music first (step 1).', 'err'); return; }
+  try { recStream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+  catch (err) { setStatus('Microphone access was blocked. Allow it in your browser settings.', 'err'); return; }
+
+  recChunks = [];
+  mediaRec = new MediaRecorder(recStream);
+  mediaRec.ondataavailable = ev => { if (ev.data && ev.data.size) recChunks.push(ev.data); };
+  mediaRec.onstop = async () => {
+    clearInterval(recTimer);
+    recStream.getTracks().forEach(t => t.stop());
+    if (recMusicEl) { recMusicEl.pause(); recMusicEl = null; }
+    $('recBtn').textContent = '● Record again';
+    const blob = new Blob(recChunks, { type: mediaRec.mimeType || 'audio/mp4' });
+    try {
+      voice = await decode(await blob.arrayBuffer());
+      const pb = $('recPlayback');
+      pb.src = URL.createObjectURL(blob); pb.style.display = 'block';
+      $('recInfo').textContent = 'Recorded ' + fmtT(voice.duration) + '. Listen below, or record again.';
+    } catch (err) {
+      voice = null;
+      $('recInfo').textContent = "Couldn't read that recording. Please try again.";
+    }
+  };
+  mediaRec.start();
+  recT0 = Date.now();
+  $('recBtn').textContent = '■ Stop recording';
+  if (useMusic) {
+    $('voiceStart').value = 0;
+    recMusicEl = new Audio(musicUrl);
+    recMusicEl.volume = Math.min(1, num('musicVol') / 100);
+    recMusicEl.play().catch(() => {});
+    recMusicEl.onended = () => { if (mediaRec && mediaRec.state === 'recording') mediaRec.stop(); };
+  }
+  recTimer = setInterval(() => { $('recInfo').textContent = 'Recording… ' + fmtT((Date.now() - recT0) / 1000); }, 500);
+});
+
+/* ---------- text voices ---------- */
+let voices = [];
+function loadVoices(){
+  if (!window.speechSynthesis) { $('ttsVoice').innerHTML = '<option>Not supported in this browser</option>'; return; }
+  voices = speechSynthesis.getVoices();
+  if (!voices.length) return;
+  const cur = $('ttsVoice').value;
+  $('ttsVoice').innerHTML = '';
+  voices.forEach(v => {
+    const o = document.createElement('option');
+    o.value = v.voiceURI; o.textContent = v.name + ' (' + v.lang + ')';
+    $('ttsVoice').appendChild(o);
+  });
+  if (cur) $('ttsVoice').value = cur;
+}
+loadVoices();
+if (window.speechSynthesis) speechSynthesis.addEventListener('voiceschanged', loadVoices);
+
+/* ---------- mix graph (used by preview and by export) ---------- */
+function totalLen(){
+  let L = music.duration;
+  if (mode !== 'text' && voice) L = Math.max(L, num('voiceStart') + voice.duration);
+  return L;
+}
+
+function buildGraph(ctx, dest, textLive){
+  const L = totalLen();
+  const mvol = num('musicVol') / 100, vvol = num('voiceVol') / 100, dl = num('duckLevel') / 100;
+  const vs = num('voiceStart');
+
+  const src = ctx.createBufferSource(); src.buffer = music;
+  const vol = ctx.createGain(), fade = ctx.createGain(), duckG = ctx.createGain();
+  vol.gain.value = mvol;
+  src.connect(vol); vol.connect(fade); fade.connect(duckG); duckG.connect(dest);
+
+  const fi = Math.min(num('fadeIn'), L);
+  const fo = Math.min(num('fadeOut'), Math.max(0, L - fi));
+  fade.gain.setValueAtTime(fi > 0 ? 0 : 1, 0);
+  if (fi > 0) fade.gain.linearRampToValueAtTime(1, fi);
+  if (fo > 0) { fade.gain.setValueAtTime(1, L - fo); fade.gain.linearRampToValueAtTime(0, L); }
+
+  duckG.gain.setValueAtTime(1, 0);
+  if (!textLive && voice && $('duck').checked) {
+    const a = Math.max(0, vs - 0.4), b = Math.max(a + 0.05, vs);
+    const c = Math.max(b + 0.01, vs + voice.duration), d = c + 0.8;
+    duckG.gain.setValueAtTime(1, a);
+    duckG.gain.linearRampToValueAtTime(dl, b);
+    duckG.gain.setValueAtTime(dl, c);
+    duckG.gain.linearRampToValueAtTime(1, d);
+  }
+  src.start(0);
+
+  if (!textLive && mode !== 'text' && voice) {
+    const vsrc = ctx.createBufferSource(); vsrc.buffer = voice;
+    const vg = ctx.createGain(); vg.gain.value = vvol;
+    vsrc.connect(vg); vg.connect(dest);
+    vsrc.start(vs);
+  }
+  return { L, duckG, dl };
+}
+
+/* ---------- preview ---------- */
+function stopLive(){
+  if (!live) return;
+  clearTimeout(live.speakTimer); clearTimeout(live.endTimer); clearInterval(live.tick);
+  try { if (window.speechSynthesis) speechSynthesis.cancel(); } catch (e) {}
+  try { live.ctx.close(); } catch (e) {}
+  live = null;
+  $('playBtn').textContent = '▶ Preview mix';
+  $('clock').textContent = '';
+}
+
+$('playBtn').addEventListener('click', () => {
+  if (live) { stopLive(); return; }
+  if (!music) { setStatus('Choose the background music first (step 1).', 'err'); return; }
+  setStatus('');
+  const text = $('ttsText').value.trim();
+  const textLive = mode === 'text' && !!text;
+  if (mode === 'text' && !text) { setStatus('Type some text for the voice to say.', 'err'); return; }
+  if (mode !== 'text' && !voice) setStatus('No voice added yet, so you will hear the music only.');
+
+  const ctx = new AC();
+  if (ctx.resume) ctx.resume();
+  const g = buildGraph(ctx, ctx.destination, textLive);
+  live = { ctx };
+
+  if (textLive && window.speechSynthesis) {
+    try { const u0 = new SpeechSynthesisUtterance(' '); u0.volume = 0; speechSynthesis.speak(u0); } catch (e) {}
+    live.speakTimer = setTimeout(() => {
+      const u = new SpeechSynthesisUtterance(text);
+      const v = voices.find(x => x.voiceURI === $('ttsVoice').value);
+      if (v) { u.voice = v; u.lang = v.lang; }
+      u.rate = num('ttsRate') || 1;
+      u.volume = Math.min(1, num('voiceVol') / 100);
+      const duckTo = $('duck').checked ? g.dl : 1;
+      u.onstart = () => { try { g.duckG.gain.setTargetAtTime(duckTo, ctx.currentTime, 0.15); } catch (e) {} };
+      u.onend = u.onerror = () => { try { g.duckG.gain.setTargetAtTime(1, ctx.currentTime, 0.4); } catch (e) {} };
+      speechSynthesis.speak(u);
+    }, num('voiceStart') * 1000);
+  }
+
+  const t0 = Date.now();
+  $('playBtn').textContent = '■ Stop preview';
+  live.tick = setInterval(() => { $('clock').textContent = fmtT((Date.now() - t0) / 1000) + ' / ' + fmtT(g.L); }, 250);
+  live.endTimer = setTimeout(stopLive, (g.L + 0.4) * 1000);
+});
+
+/* ---------- encoding ---------- */
+function toWav(buf){
+  const n = buf.length, sr = buf.sampleRate;
+  const l = buf.getChannelData(0), r = buf.numberOfChannels > 1 ? buf.getChannelData(1) : l;
+  const ab = new ArrayBuffer(44 + n * 4), dv = new DataView(ab);
+  const w = (o, s) => { for (let i = 0; i < s.length; i++) dv.setUint8(o + i, s.charCodeAt(i)); };
+  w(0, 'RIFF'); dv.setUint32(4, 36 + n * 4, true); w(8, 'WAVE'); w(12, 'fmt ');
+  dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 2, true);
+  dv.setUint32(24, sr, true); dv.setUint32(28, sr * 4, true); dv.setUint16(32, 4, true); dv.setUint16(34, 16, true);
+  w(36, 'data'); dv.setUint32(40, n * 4, true);
+  let o = 44;
+  for (let i = 0; i < n; i++) {
+    const a = Math.max(-1, Math.min(1, l[i])), b = Math.max(-1, Math.min(1, r[i]));
+    dv.setInt16(o, a < 0 ? a * 32768 : a * 32767, true);
+    dv.setInt16(o + 2, b < 0 ? b * 32768 : b * 32767, true);
+    o += 4;
+  }
+  return new Blob([ab], { type: 'audio/wav' });
+}
+
+function f2i(f){
+  const o = new Int16Array(f.length);
+  for (let i = 0; i < f.length; i++) { const s = Math.max(-1, Math.min(1, f[i])); o[i] = s < 0 ? s * 32768 : s * 32767; }
+  return o;
+}
+
+function loadLame(){
+  if (window.lamejs) return Promise.resolve();
+  return new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/lamejs/1.2.1/lame.min.js';
+    s.onload = res; s.onerror = () => rej(new Error('lame'));
+    document.head.appendChild(s);
+  });
+}
+
+async function toMp3(buf, onProgress){
+  await loadLame();
+  const enc = new lamejs.Mp3Encoder(2, buf.sampleRate, 128);
+  const l = f2i(buf.getChannelData(0)), r = f2i(buf.numberOfChannels > 1 ? buf.getChannelData(1) : buf.getChannelData(0));
+  const out = [], step = 1152 * 10;
+  let k = 0;
+  for (let i = 0; i < l.length; i += step, k++) {
+    const d = enc.encodeBuffer(l.subarray(i, i + step), r.subarray(i, i + step));
+    if (d.length) out.push(new Uint8Array(d));
+    if (k % 20 === 0) { onProgress(i / l.length); await new Promise(z => setTimeout(z, 0)); }
+  }
+  const e = enc.flush(); if (e.length) out.push(new Uint8Array(e));
+  return new Blob(out, { type: 'audio/mpeg' });
+}
+
+/* ---------- export ---------- */
+function setBar(p){ $('bar').style.display = p == null ? 'none' : 'block'; $('barI').style.width = Math.round((p || 0) * 100) + '%'; }
+
+$('exportBtn').addEventListener('click', async () => {
+  if (live) stopLive();
+  if (!music) { setStatus('Choose the background music first (step 1).', 'err'); return; }
+  if (mode === 'text') { setStatus("Text voices can't be saved in the browser. Use Record or Upload to save a mix.", 'err'); return; }
+  if (!voice) { setStatus('Add a voice first (step 2).', 'err'); return; }
+  $('exportBtn').disabled = true; $('result').style.display = 'none';
+  try {
+    setStatus('Mixing…'); setBar(0.02);
+    await new Promise(z => setTimeout(z, 30));
+    const sr = 44100, L = totalLen();
+    const off = new OAC(2, Math.ceil(L * sr), sr);
+    buildGraph(off, off.destination, false);
+    const rendered = await new Promise((res, rej) => {
+      const p = off.startRendering();
+      if (p && p.then) p.then(res, rej); else off.oncomplete = e => res(e.renderedBuffer);
+    });
+
+    let blob, ext = $('fmt').value;
+    if (ext === 'mp3') {
+      setStatus('Making MP3…');
+      try { blob = await toMp3(rendered, p => setBar(0.1 + p * 0.9)); }
+      catch (err) { ext = 'wav'; setStatus('MP3 tool could not load, saving as WAV instead…'); blob = toWav(rendered); }
+    } else { setStatus('Making WAV…'); blob = toWav(rendered); }
+
+    const base = (musicFile.name.replace(/\.[^.]+$/, '') || 'mix').replace(/[\\/:*?"<>|]/g, '_');
+    const name = base + ' - mix.' + ext;
+    if (outUrl) URL.revokeObjectURL(outUrl);
+    outUrl = URL.createObjectURL(blob);
+    outFile = new File([blob], name, { type: blob.type });
+    $('outAudio').src = outUrl;
+    $('dl').href = outUrl; $('dl').download = name;
+    $('shareBtn').style.display = (navigator.canShare && navigator.canShare({ files: [outFile] })) ? 'block' : 'none';
+    $('result').style.display = 'block';
+    setStatus('Done: ' + name + ' (' + (blob.size / 1048576).toFixed(1) + ' MB)', 'ok');
+  } catch (err) {
+    setStatus('Something went wrong while mixing. Try a shorter file or WAV.', 'err');
+  }
+  setBar(null);
+  $('exportBtn').disabled = false;
+});
+
+$('shareBtn').addEventListener('click', async () => {
+  try { await navigator.share({ files: [outFile], title: outFile.name }); } catch (e) {}
+});
+</script>
+</body>
+</html>
