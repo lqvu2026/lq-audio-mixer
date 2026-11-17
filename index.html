@@ -105,6 +105,7 @@
       <textarea id="ttsText" placeholder="Type or paste what the voice should say…"></textarea>
       <label>Voice</label>
       <select id="ttsVoice"></select>
+      <div class="info" id="ttsHint"></div>
       <label>Speed <span class="val" id="ttsRateV" style="float:right">1.0×</span></label>
       <input type="range" id="ttsRate" min="0.6" max="1.4" step="0.05" value="1">
       <div class="note">Text voices come from your device and can be played with the music here, but browsers can't save them into a file. To save a mix, use Record or Upload.</div>
@@ -261,21 +262,44 @@ $('recBtn').addEventListener('click', async () => {
 
 /* ---------- text voices ---------- */
 let voices = [];
+const looksVi = t => /[ăâđêôơưáàảãạấầẩẫậắằẳẵặéèẻẽẹếềểễệíìỉĩịóòỏõọốồổỗộớờởỡợúùủũụứừửữựýỳỷỹỵ]/i.test(t);
+const isViVoice = v => /^vi([-_]|$)/i.test(v.lang);
+
+function pickVoice(text){
+  const sel = $('ttsVoice').value;
+  if (sel && sel !== 'auto') return voices.find(v => v.voiceURI === sel) || null;
+  if (looksVi(text)) return voices.find(isViVoice) || null;
+  return null;
+}
+
+function updateTtsHint(){
+  const h = $('ttsHint'), t = $('ttsText').value;
+  if (!window.speechSynthesis || !voices.length || !looksVi(t) || $('ttsVoice').value !== 'auto') { h.textContent = ''; return; }
+  h.textContent = voices.some(isViVoice)
+    ? 'Vietnamese text detected: a Vietnamese voice will be used.'
+    : 'This looks like Vietnamese, but no Vietnamese voice was found on this device. On iPhone: Settings > Accessibility > Spoken Content > Voices > Vietnamese. Then reload this page.';
+}
+
 function loadVoices(){
   if (!window.speechSynthesis) { $('ttsVoice').innerHTML = '<option>Not supported in this browser</option>'; return; }
-  voices = speechSynthesis.getVoices();
-  if (!voices.length) return;
-  const cur = $('ttsVoice').value;
-  $('ttsVoice').innerHTML = '';
+  const all = speechSynthesis.getVoices();
+  if (!all.length) return;
+  voices = all.slice().sort((a, b) => isViVoice(b) - isViVoice(a));
+  const cur = $('ttsVoice').value || 'auto';
+  $('ttsVoice').innerHTML = '<option value="auto">Auto (match the text language)</option>';
   voices.forEach(v => {
     const o = document.createElement('option');
     o.value = v.voiceURI; o.textContent = v.name + ' (' + v.lang + ')';
     $('ttsVoice').appendChild(o);
   });
-  if (cur) $('ttsVoice').value = cur;
+  $('ttsVoice').value = cur;
+  if (!$('ttsVoice').value) $('ttsVoice').value = 'auto';
+  updateTtsHint();
 }
 loadVoices();
 if (window.speechSynthesis) speechSynthesis.addEventListener('voiceschanged', loadVoices);
+$('ttsText').addEventListener('input', updateTtsHint);
+$('ttsVoice').addEventListener('change', updateTtsHint);
 
 /* ---------- mix graph (used by preview and by export) ---------- */
 function totalLen(){
@@ -349,8 +373,9 @@ $('playBtn').addEventListener('click', () => {
     try { const u0 = new SpeechSynthesisUtterance(' '); u0.volume = 0; speechSynthesis.speak(u0); } catch (e) {}
     live.speakTimer = setTimeout(() => {
       const u = new SpeechSynthesisUtterance(text);
-      const v = voices.find(x => x.voiceURI === $('ttsVoice').value);
+      const v = pickVoice(text);
       if (v) { u.voice = v; u.lang = v.lang; }
+      else if (looksVi(text) && $('ttsVoice').value === 'auto') u.lang = 'vi-VN';
       u.rate = num('ttsRate') || 1;
       u.volume = Math.min(1, num('voiceVol') / 100);
       const duckTo = $('duck').checked ? g.dl : 1;
