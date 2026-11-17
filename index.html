@@ -108,6 +108,12 @@
       <div class="info" id="ttsHint"></div>
       <label>Speed <span class="val" id="ttsRateV" style="float:right">1.0×</span></label>
       <input type="range" id="ttsRate" min="0.6" max="1.4" step="0.05" value="1">
+      <label>Pitch (lower = deeper) <span class="val" id="ttsPitchV" style="float:right">1.0</span></label>
+      <input type="range" id="ttsPitch" min="0.2" max="1.5" step="0.05" value="1">
+      <div class="btns" style="margin-top:10px">
+        <button type="button" id="deepBtn">Deep male voice</button>
+        <button type="button" id="normalBtn">Normal voice</button>
+      </div>
       <div class="note">Text voices come from your device and can be played with the music here, but browsers can't save them into a file. To save a mix, use Record or Upload.</div>
     </div>
 
@@ -165,6 +171,13 @@ bindSlider('musicVol','musicVolV', v => v + '%');
 bindSlider('voiceVol','voiceVolV', v => v + '%');
 bindSlider('duckLevel','duckLevelV', v => v + '%');
 bindSlider('ttsRate','ttsRateV', v => parseFloat(v).toFixed(2).replace(/0$/,'') + '×');
+bindSlider('ttsPitch','ttsPitchV', v => parseFloat(v).toFixed(2).replace(/0$/,''));
+function setVoiceTone(pitch, rate){
+  $('ttsPitch').value = pitch; $('ttsRate').value = rate;
+  $('ttsPitch').dispatchEvent(new Event('input')); $('ttsRate').dispatchEvent(new Event('input'));
+}
+$('deepBtn').addEventListener('click', () => setVoiceTone(0.4, 0.9));
+$('normalBtn').addEventListener('click', () => setVoiceTone(1, 1));
 
 function decode(arrayBuffer){
   const off = new OAC(2, 1, 44100);
@@ -377,6 +390,7 @@ $('playBtn').addEventListener('click', () => {
       if (v) { u.voice = v; u.lang = v.lang; }
       else if (looksVi(text) && $('ttsVoice').value === 'auto') u.lang = 'vi-VN';
       u.rate = num('ttsRate') || 1;
+      u.pitch = num('ttsPitch') || 1;
       u.volume = Math.min(1, num('voiceVol') / 100);
       const duckTo = $('duck').checked ? g.dl : 1;
       u.onstart = () => { try { g.duckG.gain.setTargetAtTime(duckTo, ctx.currentTime, 0.15); } catch (e) {} };
