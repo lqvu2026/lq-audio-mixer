@@ -9,6 +9,7 @@ A simple web app that puts your voice, or a voice made from your text, over back
   - **Record:** use the microphone. Optionally play the music in your headphones while you record.
   - **Upload:** use an existing voice recording.
   - **Type text:** a voice from your device reads your text. Preview only (see Limitations).
+- **Voice effects:** reverb and echo (with presets Room, Hall, Echo, Both) for recorded or uploaded voice.
 - **Mix settings:** voice volume, start time of the voice, and an option to lower the music while the voice speaks.
 - **Preview** the mix, then **save** it as MP3 or WAV. Download or Share.
 

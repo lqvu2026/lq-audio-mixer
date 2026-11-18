@@ -119,6 +119,22 @@
 
     <label>Voice volume <span class="val" id="voiceVolV" style="float:right">100%</span></label>
     <input type="range" id="voiceVol" min="0" max="150" value="100">
+    <div id="fxBox">
+      <label>Voice effects (recorded or uploaded voice)</label>
+      <div class="tabs fxp" style="flex-wrap:wrap">
+        <button type="button" data-fx="0,0,0.35">None</button>
+        <button type="button" data-fx="25,0,0.35">Room</button>
+        <button type="button" data-fx="60,0,0.35">Hall</button>
+        <button type="button" data-fx="0,45,0.35">Echo</button>
+        <button type="button" data-fx="40,35,0.4">Both</button>
+      </div>
+      <label>Reverb <span class="val" id="reverbV" style="float:right">0%</span></label>
+      <input type="range" id="reverb" min="0" max="100" value="0">
+      <label>Echo <span class="val" id="echoV" style="float:right">0%</span></label>
+      <input type="range" id="echo" min="0" max="100" value="0">
+      <label>Echo spacing <span class="val" id="echoTimeV" style="float:right">0.35 s</span></label>
+      <input type="range" id="echoTime" min="0.1" max="0.9" step="0.05" value="0.35">
+    </div>
     <label>Voice starts at (seconds into the music)</label>
     <input type="number" id="voiceStart" min="0" step="0.5" value="0">
     <label class="check"><input type="checkbox" id="duck" checked> Lower the music while the voice speaks</label>
@@ -170,6 +186,14 @@ function bindSlider(id, vid, fmt){ const f = () => $(vid).textContent = fmt($(id
 bindSlider('musicVol','musicVolV', v => v + '%');
 bindSlider('voiceVol','voiceVolV', v => v + '%');
 bindSlider('duckLevel','duckLevelV', v => v + '%');
+bindSlider('reverb','reverbV', v => v + '%');
+bindSlider('echo','echoV', v => v + '%');
+bindSlider('echoTime','echoTimeV', v => parseFloat(v).toFixed(2).replace(/0$/,'') + ' s');
+document.querySelectorAll('.fxp button').forEach(b => b.addEventListener('click', () => {
+  const [r, e, t] = b.dataset.fx.split(',');
+  $('reverb').value = r; $('echo').value = e; $('echoTime').value = t;
+  ['reverb','echo','echoTime'].forEach(id => $(id).dispatchEvent(new Event('input')));
+}));
 bindSlider('ttsRate','ttsRateV', v => parseFloat(v).toFixed(2).replace(/0$/,'') + '×');
 bindSlider('ttsPitch','ttsPitchV', v => parseFloat(v).toFixed(2).replace(/0$/,''));
 function setVoiceTone(pitch, rate){
@@ -211,6 +235,7 @@ document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click
   mode = b.dataset.mode;
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
   document.querySelectorAll('.panel').forEach(p => p.classList.toggle('on', p.id === 'p-' + mode));
+  $('fxBox').style.display = mode === 'text' ? 'none' : 'block';
   setStatus('');
 }));
 
@@ -315,10 +340,27 @@ $('ttsText').addEventListener('input', updateTtsHint);
 $('ttsVoice').addEventListener('change', updateTtsHint);
 
 /* ---------- mix graph (used by preview and by export) ---------- */
+const REVERB_SEC = 2.4;
+function fxTail(){
+  const r = num('reverb') / 100, e = num('echo') / 100;
+  let t = 0;
+  if (r > 0) t = Math.max(t, REVERB_SEC);
+  if (e > 0) t = Math.max(t, num('echoTime') * 6);
+  return t;
+}
 function totalLen(){
   let L = music.duration;
-  if (mode !== 'text' && voice) L = Math.max(L, num('voiceStart') + voice.duration);
+  if (mode !== 'text' && voice) L = Math.max(L, num('voiceStart') + voice.duration + fxTail());
   return L;
+}
+function makeImpulse(ctx){
+  const sr = ctx.sampleRate, len = Math.floor(sr * REVERB_SEC);
+  const ir = ctx.createBuffer(2, len, sr);
+  for (let c = 0; c < 2; c++) {
+    const d = ir.getChannelData(c);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3);
+  }
+  return ir;
 }
 
 function buildGraph(ctx, dest, textLive){
@@ -340,7 +382,7 @@ function buildGraph(ctx, dest, textLive){
   duckG.gain.setValueAtTime(1, 0);
   if (!textLive && voice && $('duck').checked) {
     const a = Math.max(0, vs - 0.4), b = Math.max(a + 0.05, vs);
-    const c = Math.max(b + 0.01, vs + voice.duration), d = c + 0.8;
+    const c = Math.max(b + 0.01, vs + voice.duration + fxTail() * 0.6), d = c + 0.8;
     duckG.gain.setValueAtTime(1, a);
     duckG.gain.linearRampToValueAtTime(dl, b);
     duckG.gain.setValueAtTime(dl, c);
@@ -352,6 +394,18 @@ function buildGraph(ctx, dest, textLive){
     const vsrc = ctx.createBufferSource(); vsrc.buffer = voice;
     const vg = ctx.createGain(); vg.gain.value = vvol;
     vsrc.connect(vg); vg.connect(dest);
+    const rv = num('reverb') / 100, ec = num('echo') / 100;
+    if (rv > 0) {
+      const conv = ctx.createConvolver(); conv.buffer = makeImpulse(ctx);
+      const wet = ctx.createGain(); wet.gain.value = rv * 1.6;
+      vg.connect(conv); conv.connect(wet); wet.connect(dest);
+    }
+    if (ec > 0) {
+      const dly = ctx.createDelay(1.5); dly.delayTime.value = num('echoTime') || 0.35;
+      const fb = ctx.createGain(); fb.gain.value = 0.4;
+      const eg = ctx.createGain(); eg.gain.value = ec;
+      vg.connect(dly); dly.connect(fb); fb.connect(dly); dly.connect(eg); eg.connect(dest);
+    }
     vsrc.start(vs);
   }
   return { L, duckG, dl };
