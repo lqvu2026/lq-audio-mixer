@@ -555,7 +555,7 @@ $('exportBtn').addEventListener('click', async () => {
 });
 
 $('shareBtn').addEventListener('click', async () => {
-  try { await navigator.share({ files: [outFile], title: outFile.name }); } catch (e) {}
+  try { await navigator.share({ files: [outFile] }); } catch (e) {}
 });
 </script>
 </body>
