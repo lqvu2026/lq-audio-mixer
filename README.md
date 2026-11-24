@@ -5,6 +5,7 @@ A simple web app that puts your voice, or a voice made from your text, over back
 ## Features
 
 - **Background music:** MP3, M4A, WAV, OGG. Volume, fade in, fade out.
+- **Music effects:** optional reverb and echo on the background music (presets Room, Hall, Hall + echo), useful for a dry guitar recording.
 - **Voice, three ways:**
   - **Record:** use the microphone. Optionally play the music in your headphones while you record.
   - **Upload:** use an existing voice recording.

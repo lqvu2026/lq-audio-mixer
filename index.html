@@ -78,6 +78,17 @@
       <div><label>Fade in (sec)</label><input type="number" id="fadeIn" min="0" step="0.5" value="0"></div>
       <div><label>Fade out (sec)</label><input type="number" id="fadeOut" min="0" step="0.5" value="2"></div>
     </div>
+    <label>Music effects (optional, good for a dry guitar recording)</label>
+    <div class="tabs mfxp" style="flex-wrap:wrap">
+      <button type="button" data-mfx="0,0">None</button>
+      <button type="button" data-mfx="20,0">Room</button>
+      <button type="button" data-mfx="40,0">Hall</button>
+      <button type="button" data-mfx="30,20">Hall + echo</button>
+    </div>
+    <label>Music reverb <span class="val" id="musicReverbV" style="float:right">0%</span></label>
+    <input type="range" id="musicReverb" min="0" max="100" value="0">
+    <label>Music echo <span class="val" id="musicEchoV" style="float:right">0%</span></label>
+    <input type="range" id="musicEcho" min="0" max="100" value="0">
   </section>
 
   <!-- 2. VOICE -->
@@ -187,6 +198,13 @@ bindSlider('musicVol','musicVolV', v => v + '%');
 bindSlider('voiceVol','voiceVolV', v => v + '%');
 bindSlider('duckLevel','duckLevelV', v => v + '%');
 bindSlider('reverb','reverbV', v => v + '%');
+bindSlider('musicReverb','musicReverbV', v => v + '%');
+bindSlider('musicEcho','musicEchoV', v => v + '%');
+document.querySelectorAll('.mfxp button').forEach(b => b.addEventListener('click', () => {
+  const [r, e] = b.dataset.mfx.split(',');
+  $('musicReverb').value = r; $('musicEcho').value = e;
+  ['musicReverb','musicEcho'].forEach(id => $(id).dispatchEvent(new Event('input')));
+}));
 bindSlider('echo','echoV', v => v + '%');
 bindSlider('echoTime','echoTimeV', v => parseFloat(v).toFixed(2).replace(/0$/,'') + ' s');
 document.querySelectorAll('.fxp button').forEach(b => b.addEventListener('click', () => {
@@ -348,10 +366,20 @@ function fxTail(){
   if (e > 0) t = Math.max(t, num('echoTime') * 6);
   return t;
 }
-function totalLen(){
+const MUSIC_ECHO_SEC = 0.4;
+function baseLen(){
   let L = music.duration;
   if (mode !== 'text' && voice) L = Math.max(L, num('voiceStart') + voice.duration + fxTail());
   return L;
+}
+function musicTail(){
+  let t = 0;
+  if (num('musicReverb') > 0) t = REVERB_SEC;
+  if (num('musicEcho') > 0) t = Math.max(t, MUSIC_ECHO_SEC * 6);
+  return t;
+}
+function totalLen(){
+  return Math.max(baseLen(), music.duration + musicTail());
 }
 function makeImpulse(ctx){
   const sr = ctx.sampleRate, len = Math.floor(sr * REVERB_SEC);
@@ -364,7 +392,7 @@ function makeImpulse(ctx){
 }
 
 function buildGraph(ctx, dest, textLive){
-  const L = totalLen();
+  const L = baseLen(), LT = totalLen();
   const mvol = num('musicVol') / 100, vvol = num('voiceVol') / 100, dl = num('duckLevel') / 100;
   const vs = num('voiceStart');
 
@@ -372,6 +400,18 @@ function buildGraph(ctx, dest, textLive){
   const vol = ctx.createGain(), fade = ctx.createGain(), duckG = ctx.createGain();
   vol.gain.value = mvol;
   src.connect(vol); vol.connect(fade); fade.connect(duckG); duckG.connect(dest);
+  const mr = num('musicReverb') / 100, me = num('musicEcho') / 100;
+  if (mr > 0) {
+    const conv = ctx.createConvolver(); conv.buffer = makeImpulse(ctx);
+    const wet = ctx.createGain(); wet.gain.value = mr * 1.2;
+    fade.connect(conv); conv.connect(wet); wet.connect(duckG);
+  }
+  if (me > 0) {
+    const dly = ctx.createDelay(1.5); dly.delayTime.value = MUSIC_ECHO_SEC;
+    const fb = ctx.createGain(); fb.gain.value = 0.35;
+    const eg = ctx.createGain(); eg.gain.value = me * 0.8;
+    fade.connect(dly); dly.connect(fb); fb.connect(dly); dly.connect(eg); eg.connect(duckG);
+  }
 
   const fi = Math.min(num('fadeIn'), L);
   const fo = Math.min(num('fadeOut'), Math.max(0, L - fi));
@@ -408,7 +448,7 @@ function buildGraph(ctx, dest, textLive){
     }
     vsrc.start(vs);
   }
-  return { L, duckG, dl };
+  return { L: LT, duckG, dl };
 }
 
 /* ---------- preview ---------- */
